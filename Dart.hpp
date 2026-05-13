@@ -260,10 +260,10 @@ class Dart : public LibXR::Application {
       //   dart->dart_gimbal_cmd_.yaw = 0.0f;
       // }
 
-      // if (launcher_ref.Available()) {
-      //   dart->ref_data_.dc = launcher_ref.GetData().dc;
-      //   launcher_ref.StartWaiting();
-      // }
+      if (launcher_ref.Available()) {
+        dart->ref_data_.dc = launcher_ref.GetData().dc;
+        launcher_ref.StartWaiting();
+      }
       if (fire_notify_suber.Available()) {
         dart->fire_cmd_ = fire_notify_suber.GetData();
         fire_notify_suber.StartWaiting();
@@ -756,7 +756,7 @@ class Dart : public LibXR::Application {
   DartGimbalCMD dart_gimbal_cmd_ = {0.0f};
 
   // 有限状态机相关成员变量
-  YawMotorState yaw_motor_state_ = YawMotorState::NORMAL_CONTROL;
+  YawMotorState yaw_motor_state_ = YawMotorState::INITIALIZING;
   bool scan_direction_ = false;  // true: 向max方向, false: 向min方向
   uint32_t delay_time_gimbal_ = 0;
   float yaw_motor_setpoint_angle_ = 0.0f;
@@ -813,7 +813,7 @@ class Dart : public LibXR::Application {
   bool is_firing_ = false;
   bool launch_detected_ = false;
 
-  LaunchMode launch_mode_ = LaunchMode::FULL_FIRE;
+  LaunchMode launch_mode_ = LaunchMode::SINGLE_SHOT;
   PushState push_state_ = PushState::IDLE;
   LibXR::MillisecondTimestamp launch_complete_timestamp_ = 0;
   LibXR::MillisecondTimestamp launch_detect_timestamp_ = 0;
