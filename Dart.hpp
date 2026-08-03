@@ -2,10 +2,10 @@
 
 // clang-format off
 /* === MODULE MANIFEST V2 ===
-module_description: InteSET_MODE_RELAXgrated Dart system combining gimbal and launcher functionality
+module_description: Integrated Dart system combining gimbal and launcher functionality
 constructor_args:
-  -task_stack_depth: 4096
-  -pid_yaw_angle:
+  - task_stack_depth: 4096
+  - pid_yaw_angle:
       k: 1.0
       p: 900.0
       i: 0.0
@@ -13,7 +13,7 @@ constructor_args:
       i_limit: 0.0
       out_limit: 1.0
       cycle: false
-  -pid_yaw_speed:
+  - pid_yaw_speed:
       k: 1.0
       p: 0.001
       i: 0.0
@@ -21,17 +21,17 @@ constructor_args:
       i_limit: 0.0
       out_limit: 1.0
       cycle: false
-  -motor_yaw: '@&motor_yaw'
-  -motor_pit: '@&motor_pitch'
-  -motor_fric_front_left: '@&motor_fric_front_left'
-  -motor_fric_front_right: '@&motor_fric_front_right'
-  -motor_fric_back_left: '@&motor_fric_back_left'
-  -motor_fric_back_right: '@&motor_fric_back_right'
-  -push_motor: '@&push_motor'
-  -push_motor_gear_ratio: 36.0
-  -fric1_setpoint_speed: 4500.0
-  -fric2_setpoint_speed: 4400.0
-  -fric_speed_pid_0:
+  - motor_yaw: '@nullptr'
+  - motor_pitch: '@nullptr'
+  - motor_fric_front_left: '@nullptr'
+  - motor_fric_front_right: '@nullptr'
+  - motor_fric_back_left: '@nullptr'
+  - motor_fric_back_right: '@nullptr'
+  - push_motor: '@nullptr'
+  - push_motor_gear_ratio: 36.0
+  - fric1_setpoint_speed: 4500.0
+  - fric2_setpoint_speed: 4400.0
+  - fric_speed_pid_0:
       k: 1.0
       p: 0.001
       i: 0.0
@@ -39,7 +39,7 @@ constructor_args:
       i_limit: 0.0
       out_limit: 1.0
       cycle: false
-  -fric_speed_pid_1:
+  - fric_speed_pid_1:
       k: 1.0
       p: 0.001
       i: 0.0
@@ -47,7 +47,7 @@ constructor_args:
       i_limit: 0.0
       out_limit: 1.0
       cycle: false
-  -fric_speed_pid_2:
+  - fric_speed_pid_2:
       k: 1.0
       p: 0.001
       i: 0.0
@@ -55,7 +55,7 @@ constructor_args:
       i_limit: 0.0
       out_limit: 1.0
       cycle: false
-  -fric_speed_pid_3:
+  - fric_speed_pid_3:
       k: 1.0
       p: 0.001
       i: 0.0
@@ -63,7 +63,7 @@ constructor_args:
       i_limit: 0.0
       out_limit: 1.0
       cycle: false
-  -push_motor_speed_pid:
+  - push_motor_speed_pid:
       k: 1.0
       p: 0.0008
       i: 0.0
@@ -71,7 +71,7 @@ constructor_args:
       i_limit: 0.0
       out_limit: 1.0
       cycle: false
-  -push_motor_angle_pid:
+  - push_motor_angle_pid:
       k: 1.0
       p: 1000.0
       i: 0.0
@@ -79,14 +79,15 @@ constructor_args:
       i_limit: 0.0
       out_limit: 2000.0
       cycle: false
-  -cmd:‘&@cmd’
+  - cmd: '@nullptr'
 template_args: []
 required_hardware:
   - dr16
   - can
 depends:
-  - qdu-feature/CMD
-  - qdu_feature/RMMotor
+  - qdu-future/CMD
+  - qdu-future/RMMotor
+  - qdu-future/Referee
 === END MANIFEST === */
 // clang-format on
 
@@ -181,7 +182,6 @@ class Dart : public LibXR::Application {
         pid_yaw_speed_(pid_yaw_speed),
         motor_yaw_(motor_yaw),
         motor_pitch_(motor_pitch),
-        user_key_(hw.Find<LibXR::GPIO>("USER_KEY")),
         motor_fric_front_left_(motor_fric_front_left_),
         motor_fric_front_right_(motor_fric_front_right_),
         motor_fric_back_left_(motor_fric_back_left_),
@@ -198,6 +198,19 @@ class Dart : public LibXR::Application {
     UNUSED(hw);
     UNUSED(app);
     ref_data_.dc.opening_status = 3;
+
+    ASSERT(motor_yaw_ != nullptr);
+    ASSERT(motor_pitch_ != nullptr);
+    ASSERT(motor_fric_front_left_ != nullptr);
+    ASSERT(motor_fric_front_right_ != nullptr);
+    ASSERT(motor_fric_back_left_ != nullptr);
+    ASSERT(motor_fric_back_right_ != nullptr);
+    ASSERT(push_motor_ != nullptr);
+    ASSERT(cmd_ != nullptr);
+
+    dart_gimbal_data_tp_ =
+        LibXR::Topic::CreateTopic<DartGimbalCMD>("host_dart_gimbal_cmd");
+    launcher_topic_ = LibXR::Topic::CreateTopic<bool>("launch_flag");
 
     last_online_time_ = LibXR::Timebase::GetMicroseconds();
     thread_.Create(this, ThreadFunction, "dartThread", task_stack_depth,
@@ -893,14 +906,12 @@ class Dart : public LibXR::Application {
   float max_yaw_motor_angle_ = 0.0f;
   const float SCAN_SPEED = 8.0f;  // 扫描速度 (rad/s)
 
-  LibXR::Topic dart_gimbal_data_tp_ =
-      LibXR::Topic::CreateTopic<DartGimbalCMD>("host_dart_gimbal_cmd");
+  LibXR::Topic dart_gimbal_data_tp_;
 
   // === Launcher Members ===
   CMD::ChassisCMD cmd_data_{};
   float dt_launcher_ = 0.0f;
   LibXR::MillisecondTimestamp last_online_time_launcher_ = 0;
-  LibXR::GPIO* user_key_;
 
   RMMotor* motor_fric_front_left_;
   RMMotor* motor_fric_front_right_;
@@ -959,7 +970,7 @@ class Dart : public LibXR::Application {
   float fric_output_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
   float push_motor_output_ = 0.0f;
 
-  LibXR::Topic launcher_topic_ = LibXR::Topic::CreateTopic<bool>("launch_flag");
+  LibXR::Topic launcher_topic_;
   bool marked_launch_ = false;
 
   LibXR::PID<float> fric_speed_pid_[4] = {0.0f, 0.0f, 0.0f, 0.0f};
