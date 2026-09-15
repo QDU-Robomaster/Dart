@@ -2,91 +2,14 @@
 
 // clang-format off
 /* === MODULE MANIFEST V2 ===
-module_description: InteSET_MODE_RELAXgrated Dart system combining gimbal and launcher functionality
-constructor_args:
-  -task_stack_depth: 4096
-  -pid_yaw_angle:
-      k: 1.0
-      p: 900.0
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 1.0
-      cycle: false
-  -pid_yaw_speed:
-      k: 1.0
-      p: 0.001
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 1.0
-      cycle: false
-  -motor_yaw: '@&motor_yaw'
-  -motor_pit: '@&motor_pitch'
-  -motor_fric_front_left: '@&motor_fric_front_left'
-  -motor_fric_front_right: '@&motor_fric_front_right'
-  -motor_fric_back_left: '@&motor_fric_back_left'
-  -motor_fric_back_right: '@&motor_fric_back_right'
-  -push_motor: '@&push_motor'
-  -push_motor_gear_ratio: 36.0
-  -fric1_setpoint_speed: 4500.0
-  -fric2_setpoint_speed: 4400.0
-  -fric_speed_pid_0:
-      k: 1.0
-      p: 0.001
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 1.0
-      cycle: false
-  -fric_speed_pid_1:
-      k: 1.0
-      p: 0.001
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 1.0
-      cycle: false
-  -fric_speed_pid_2:
-      k: 1.0
-      p: 0.001
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 1.0
-      cycle: false
-  -fric_speed_pid_3:
-      k: 1.0
-      p: 0.001
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 1.0
-      cycle: false
-  -push_motor_speed_pid:
-      k: 1.0
-      p: 0.0008
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 1.0
-      cycle: false
-  -push_motor_angle_pid:
-      k: 1.0
-      p: 1000.0
-      i: 0.0
-      d: 0.0
-      i_limit: 0.0
-      out_limit: 2000.0
-      cycle: false
-  -cmd:‘&@cmd’
-template_args: []
-required_hardware:
-  - dr16
-  - can
+module_description: Integrated Dart system combining gimbal and launcher functionality
 depends:
-  - qdu-feature/CMD
-  - qdu_feature/RMMotor
+- id: QDU-Robomaster/CMD
+  ref: same-or-dev
+- id: QDU-Robomaster/RMMotor
+  ref: same-or-dev
+- id: QDU-Robomaster/Referee
+  ref: same-or-dev
 === END MANIFEST === */
 // clang-format on
 
@@ -96,7 +19,6 @@ depends:
 #include "CMD.hpp"
 #include "RMMotor.hpp"
 #include "Referee.hpp"
-#include "app_framework.hpp"
 #include "cycle_value.hpp"
 #include "event.hpp"
 #include "gpio.hpp"
@@ -111,26 +33,31 @@ depends:
 #include "timebase.hpp"
 #include "uart.hpp"
 
-class Dart : public LibXR::Application {
+class Dart
+{
  public:
-  enum class DartMode : uint8_t {
+  enum class DartMode : uint8_t
+  {
     RELAX = 0,
     YAW_COMMON = 1,
     YAW_SCAN = 2,
     GAME = 3,
   };
-  enum class OPENING_STATUS : uint8_t {
+  enum class OPENING_STATUS : uint8_t
+  {
     ON = 0,
     CLOSE = 1,
     IS_OPENING = 2,
     DEFAULT = 3,
   };
-  enum class LaunchMode : uint8_t {
+  enum class LaunchMode : uint8_t
+  {
     SINGLE_SHOT = 0,  // 单发模式
     FULL_FIRE = 1     // 连发模式
   };
 
-  enum class PushState : uint8_t {
+  enum class PushState : uint8_t
+  {
     IDLE,            // 空闲状态，在最小位置
     MOVING_TO_MAX,   // 向最大位置移动
     AT_MAX_WAITING,  // 在最大位置等待（仅单发模式）
@@ -138,40 +65,44 @@ class Dart : public LibXR::Application {
     STOP_MOVING,
   };
 
-  struct DartGimbalCMD {
+  struct DartGimbalCMD
+  {
     float yaw;
   };
 
-  enum class DartGimbalEvent : uint8_t {
+  enum class DartGimbalEvent : uint8_t
+  {
     SET_MODE_RELAX = 0,
     SET_MODE_COMMON = 1,
   };
 
-  enum class DartEvent : uint8_t {
+  enum class DartEvent : uint8_t
+  {
     SET_MODE_FRIC_START,
     SET_MODE_FRIC_STOP,
   };
 
-  enum class DartLauncherMode : uint8_t {
+  enum class DartLauncherMode : uint8_t
+  {
     FRIC_START,
     FRIC_STOP,
   };
 
   // Yaw motor状态机状态
-  enum class YawMotorState : uint8_t {
+  enum class YawMotorState : uint8_t
+  {
     INITIALIZING,   // 初始化状态：向正方向移动寻找极限位置
     SCANNING,       // 扫描状态：在max和min之间来回扫描
     NORMAL_CONTROL  // 正常控制状态：接收上位机指令进行控制
   };
 
-  Dart(LibXR::HardwareContainer& hw, LibXR::ApplicationManager& app,
-       uint32_t task_stack_depth, LibXR::PID<float>::Param pid_yaw_angle,
-       LibXR::PID<float>::Param pid_yaw_speed, Motor* motor_yaw,
-       Motor* motor_pitch, RMMotor* motor_fric_front_left_,
+  Dart(LibXR::GPIO* external_USER_KEY, uint32_t task_stack_depth,
+       LibXR::PID<float>::Param pid_yaw_angle, LibXR::PID<float>::Param pid_yaw_speed,
+       Motor* motor_yaw, Motor* motor_pitch, RMMotor* motor_fric_front_left_,
        RMMotor* motor_fric_front_right_, RMMotor* motor_fric_back_left_,
-       RMMotor* motor_fric_back_right_, RMMotor* push_motor,
-       float push_motor_gear_ratio_, float fric1_setpoint_speed,
-       float fric2_setpoint_speed, LibXR::PID<float>::Param fric_speed_pid_0,
+       RMMotor* motor_fric_back_right_, RMMotor* push_motor, float push_motor_gear_ratio_,
+       float fric1_setpoint_speed, float fric2_setpoint_speed,
+       LibXR::PID<float>::Param fric_speed_pid_0,
        LibXR::PID<float>::Param fric_speed_pid_1,
        LibXR::PID<float>::Param fric_speed_pid_2,
        LibXR::PID<float>::Param fric_speed_pid_3,
@@ -181,7 +112,7 @@ class Dart : public LibXR::Application {
         pid_yaw_speed_(pid_yaw_speed),
         motor_yaw_(motor_yaw),
         motor_pitch_(motor_pitch),
-        user_key_(hw.Find<LibXR::GPIO>("USER_KEY")),
+        user_key_(external_USER_KEY),
         motor_fric_front_left_(motor_fric_front_left_),
         motor_fric_front_right_(motor_fric_front_right_),
         motor_fric_back_left_(motor_fric_back_left_),
@@ -194,9 +125,8 @@ class Dart : public LibXR::Application {
                         fric_speed_pid_3},
         push_motor_speed_pid_(push_motor_speed_pid_),
         push_motor_angle_pid_(push_motor_angle_pid),
-        cmd_(cmd) {
-    UNUSED(hw);
-    UNUSED(app);
+        cmd_(cmd)
+  {
     ref_data_.dc.opening_status = 3;
 
     last_online_time_ = LibXR::Timebase::GetMicroseconds();
@@ -231,7 +161,8 @@ class Dart : public LibXR::Application {
     //     },
     //     this);
     auto start_ctrl_callback = LibXR::Callback<uint32_t>::Create(
-        [](bool in_isr, Dart* dart, uint32_t event_id) {
+        [](bool in_isr, Dart* dart, uint32_t event_id)
+        {
           UNUSED(in_isr);
           UNUSED(event_id);
           dart->EventHandler(static_cast<DartMode>(DartMode::RELAX));
@@ -240,7 +171,8 @@ class Dart : public LibXR::Application {
         this);
 
     auto lost_ctrl_callback = LibXR::Callback<uint32_t>::Create(
-        [](bool in_isr, Dart* dart, uint32_t event_id) {
+        [](bool in_isr, Dart* dart, uint32_t event_id)
+        {
           UNUSED(in_isr);
           UNUSED(event_id);
           dart->EventHandler(static_cast<DartMode>(DartMode::GAME));
@@ -249,7 +181,8 @@ class Dart : public LibXR::Application {
         this);
 
     auto callback = LibXR::Callback<uint32_t>::Create(
-        [](bool in_isr, Dart* dart, uint32_t event_id) {
+        [](bool in_isr, Dart* dart, uint32_t event_id)
+        {
           UNUSED(in_isr);
           dart->EventHandler(static_cast<DartMode>(event_id));
         },
@@ -262,13 +195,12 @@ class Dart : public LibXR::Application {
     cmd_->GetEvent().Register(CMD::CMD_EVENT_START_CTRL, start_ctrl_callback);
   }
 
-  static void ThreadFunction(Dart* dart) {
+  static void ThreadFunction(Dart* dart)
+  {
     LibXR::Topic::ASyncSubscriber<CMD::GimbalCMD> dart_gimbal_suber(
         "host_dart_gimbal_cmd");
-    LibXR::Topic::ASyncSubscriber<CMD::LauncherCMD> launch_notify_suber(
-        "launcher_cmd");
-    LibXR::Topic::ASyncSubscriber<Referee::LauncherPack> launcher_ref(
-        "launcher_ref");
+    LibXR::Topic::ASyncSubscriber<CMD::LauncherCMD> launch_notify_suber("launcher_cmd");
+    LibXR::Topic::ASyncSubscriber<Referee::LauncherPack> launcher_ref("launcher_ref");
     LibXR::Topic::ASyncSubscriber<CMD::ChassisCMD> cmd_suber("chassis_cmd");
     LibXR::Topic::ASyncSubscriber<bool> fire_notify_suber("fire_notify");
     dart_gimbal_suber.StartWaiting();
@@ -276,16 +208,19 @@ class Dart : public LibXR::Application {
     launcher_ref.StartWaiting();
     cmd_suber.StartWaiting();
     fire_notify_suber.StartWaiting();
-    while (1) {
-      if (cmd_suber.Available()) {
+    while (1)
+    {
+      if (cmd_suber.Available())
+      {
         dart->cmd_data_ = cmd_suber.GetData();
         cmd_suber.StartWaiting();
       }
-      if (dart_gimbal_suber.Available()) {
+      if (dart_gimbal_suber.Available())
+      {
         float new_yaw = dart_gimbal_suber.GetData().yaw;
         // 检查是否是不同的数据
-        if (std::abs(new_yaw - dart->dart_gimbal_cmd_.yaw) > 1e-6f &&
-            new_yaw != 0.0f) {
+        if (std::abs(new_yaw - dart->dart_gimbal_cmd_.yaw) > 1e-6f && new_yaw != 0.0f)
+        {
           dart->dart_gimbal_cmd_.yaw = new_yaw;
           dart->yaw_motor_state_ = YawMotorState::NORMAL_CONTROL;
           dart->last_gimbal_data_time_ = LibXR::Timebase::GetMilliseconds();
@@ -298,13 +233,16 @@ class Dart : public LibXR::Application {
       auto now_time = LibXR::Timebase::GetMilliseconds();
       if (dart->yaw_motor_state_ == YawMotorState::NORMAL_CONTROL &&
           std::abs(dart->dart_gimbal_cmd_.yaw) > 1e-6f &&  // 数据非0
-          (now_time - dart->last_gimbal_data_time_).ToMillisecond() > 100) {
+          (now_time - dart->last_gimbal_data_time_).ToMillisecond() > 100)
+      {
         // 只有在从未初始化过时才重置限位值
-        if (dart->min_yaw_motor_angle_ == 0.0f ||
-            dart->max_yaw_motor_angle_ == 0.0f) {
+        if (dart->min_yaw_motor_angle_ == 0.0f || dart->max_yaw_motor_angle_ == 0.0f)
+        {
           dart->yaw_motor_state_ = YawMotorState::INITIALIZING;
           dart->delay_time_gimbal_ = 0;
-        } else {
+        }
+        else
+        {
           // 已经有有效的限位值，直接进入扫描模式
           dart->yaw_motor_state_ = YawMotorState::SCANNING;
           dart->yaw_motor_setpoint_angle_ = dart->min_yaw_motor_angle_;
@@ -321,8 +259,10 @@ class Dart : public LibXR::Application {
       // } else {
       //   dart->dart_gimbal_cmd_.yaw = 0.0f;
       // }
-      if (dart->mode_ == DartMode::GAME) {
-        if (launcher_ref.Available()) {
+      if (dart->mode_ == DartMode::GAME)
+      {
+        if (launcher_ref.Available())
+        {
           dart->ref_data_.dc = launcher_ref.GetData().dc;
           launcher_ref.StartWaiting();
         }
@@ -332,7 +272,8 @@ class Dart : public LibXR::Application {
       //   dart->ref_data_.dc.opening_status =
       //       static_cast<uint8_t>(Dart::OPENING_STATUS::DEFAULT);
       // }
-      if (fire_notify_suber.Available()) {
+      if (fire_notify_suber.Available())
+      {
         dart->fire_cmd_ = fire_notify_suber.GetData();
         fire_notify_suber.StartWaiting();
       }
@@ -358,7 +299,8 @@ class Dart : public LibXR::Application {
       dart->UpdateFric();
       dart->UpdatePushMotor();
       dart->DR16CONTROL();
-      if (dart->mode_ == DartMode::GAME) {
+      if (dart->mode_ == DartMode::GAME)
+      {
         dart->DetectLaunch();
       }
       dart->ControlYaw();
@@ -370,10 +312,11 @@ class Dart : public LibXR::Application {
     }
   }
 
-  void OnMonitor() override {}
+  void OnMonitor() {}
 
   // === Gimbal Functions ===
-  void UpdateYaw() {
+  void UpdateYaw()
+  {
     auto now = LibXR::Timebase::GetMicroseconds();
     dt_gimbal_ = (now - last_online_time_).ToSecondf();
     last_online_time_ = now;
@@ -383,37 +326,42 @@ class Dart : public LibXR::Application {
     motor_yaw_->Update();
     motor_yaw_feedback_ = motor_yaw_->GetFeedback();
     const float DELTA_YAW_MOTOR_ANGLE =
-        LibXR::CycleValue<float>(motor_yaw_feedback_.abs_angle) -
-        LAST_YAW_MOTOR_ANGLE;
+        LibXR::CycleValue<float>(motor_yaw_feedback_.abs_angle) - LAST_YAW_MOTOR_ANGLE;
     this->yaw_motor_angle_ += DELTA_YAW_MOTOR_ANGLE / YAW_MOTOR_GEAR_RATIO;
   }
 
-  void UpdatePitch() {
+  void UpdatePitch()
+  {
     motor_pitch_->Update();
     motor_pitch_feedback_ = motor_pitch_->GetFeedback();
   }
 
-  void ControlYaw() {
-    if (current_mode_ == DartGimbalEvent::SET_MODE_RELAX) {
+  void ControlYaw()
+  {
+    if (current_mode_ == DartGimbalEvent::SET_MODE_RELAX)
+    {
       motor_yaw_->Relax();
       return;
     }
-    if (mode_ == DartMode::RELAX) {
+    if (mode_ == DartMode::RELAX)
+    {
       motor_yaw_->Relax();
       return;
     }
 
     float out_yaw = 0.0f;
 
-    switch (yaw_motor_state_) {
-      case YawMotorState::INITIALIZING: {
+    switch (yaw_motor_state_)
+    {
+      case YawMotorState::INITIALIZING:
+      {
         // 向正方向移动寻找极限位置
         yaw_motor_setpoint_angle_ -= LibXR::TWO_PI / 250.0f;
         delay_time_gimbal_++;
 
         // 检测扭矩是否变大（超过阈值），表示到达机械极限
-        if (delay_time_gimbal_ > 150 &&
-            std::abs(motor_yaw_feedback_.torque) > 0.075f) {
+        if (delay_time_gimbal_ > 150 && std::abs(motor_yaw_feedback_.torque) > 0.075f)
+        {
           min_yaw_motor_angle_ = yaw_motor_angle_;
           max_yaw_motor_angle_ = min_yaw_motor_angle_ + 65.0f;
           yaw_motor_setpoint_angle_ = max_yaw_motor_angle_;
@@ -421,70 +369,76 @@ class Dart : public LibXR::Application {
           yaw_motor_state_ = YawMotorState::SCANNING;
         }
         // 使用角度PID控制到设定点
-        float target_yaw_speed = pid_yaw_angle_.Calculate(
-            yaw_motor_setpoint_angle_, yaw_motor_angle_, dt_gimbal_);
-        out_yaw = pid_yaw_speed_.Calculate(
-            target_yaw_speed, motor_yaw_feedback_.velocity, dt_gimbal_);
+        float target_yaw_speed = pid_yaw_angle_.Calculate(yaw_motor_setpoint_angle_,
+                                                          yaw_motor_angle_, dt_gimbal_);
+        out_yaw = pid_yaw_speed_.Calculate(target_yaw_speed, motor_yaw_feedback_.velocity,
+                                           dt_gimbal_);
         break;
       }
 
-      case YawMotorState::SCANNING: {
+      case YawMotorState::SCANNING:
+      {
         // 在max和min之间扫描
-        if (scan_direction_) {
+        if (scan_direction_)
+        {
           // 向max方向扫描
           yaw_motor_setpoint_angle_ += SCAN_SPEED * dt_gimbal_;
-          if (yaw_motor_angle_ >= max_yaw_motor_angle_ - 1.0f) {
+          if (yaw_motor_angle_ >= max_yaw_motor_angle_ - 1.0f)
+          {
             scan_direction_ = false;                           // 切换方向
             yaw_motor_setpoint_angle_ = max_yaw_motor_angle_;  // 限制在边界
           }
-        } else {
+        }
+        else
+        {
           // 向min方向扫描
           yaw_motor_setpoint_angle_ -= SCAN_SPEED * dt_gimbal_;
-          if (yaw_motor_angle_ <= min_yaw_motor_angle_ + 2.0f) {
+          if (yaw_motor_angle_ <= min_yaw_motor_angle_ + 2.0f)
+          {
             scan_direction_ = true;                            // 切换方向
             yaw_motor_setpoint_angle_ = min_yaw_motor_angle_;  // 限制在边界
           }
         }
         // 确保设定点在范围内
-        yaw_motor_setpoint_angle_ =
-            std::clamp(yaw_motor_setpoint_angle_, min_yaw_motor_angle_,
-                       max_yaw_motor_angle_);
+        yaw_motor_setpoint_angle_ = std::clamp(
+            yaw_motor_setpoint_angle_, min_yaw_motor_angle_, max_yaw_motor_angle_);
         // 使用角度PID控制到设定点
-        float target_yaw_speed = pid_yaw_angle_.Calculate(
-            yaw_motor_setpoint_angle_, yaw_motor_angle_, dt_gimbal_);
-        out_yaw = pid_yaw_speed_.Calculate(
-            target_yaw_speed, motor_yaw_feedback_.velocity, dt_gimbal_);
+        float target_yaw_speed = pid_yaw_angle_.Calculate(yaw_motor_setpoint_angle_,
+                                                          yaw_motor_angle_, dt_gimbal_);
+        out_yaw = pid_yaw_speed_.Calculate(target_yaw_speed, motor_yaw_feedback_.velocity,
+                                           dt_gimbal_);
         break;
       }
 
-      case YawMotorState::NORMAL_CONTROL: {
+      case YawMotorState::NORMAL_CONTROL:
+      {
         // 正常控制模式，使用上位机指令，但限制在min和max之间
         float target_yaw_angle = dart_gimbal_cmd_.yaw + yaw_motor_angle_;
         // 如果已经完成初始化，限制目标角度在min和max之间
-        if (min_yaw_motor_angle_ != 0.0f || max_yaw_motor_angle_ != 0.0f) {
+        if (min_yaw_motor_angle_ != 0.0f || max_yaw_motor_angle_ != 0.0f)
+        {
           // 限制绝对目标位置在范围内
-          target_yaw_angle = std::clamp(target_yaw_angle, min_yaw_motor_angle_,
-                                        max_yaw_motor_angle_);
+          target_yaw_angle =
+              std::clamp(target_yaw_angle, min_yaw_motor_angle_, max_yaw_motor_angle_);
         }
         Solve(out_yaw, target_yaw_angle, dt_gimbal_);
         break;
       }
     }
 
-    auto yaw_motor_cmd = Motor::MotorCmd(
-        {.mode = Motor::ControlMode::MODE_CURRENT, .velocity = out_yaw});
+    auto yaw_motor_cmd =
+        Motor::MotorCmd({.mode = Motor::ControlMode::MODE_CURRENT, .velocity = out_yaw});
 
     auto motor_control = [&](Motor* motor, const Motor::Feedback& fb,
-                             const Motor::MotorCmd& cmd) {
-      motor->Control(cmd);
-    };
+                             const Motor::MotorCmd& cmd) { motor->Control(cmd); };
 
     motor_control(motor_yaw_, motor_yaw_feedback_, yaw_motor_cmd);
   }
 
-  void ControlPitch() {
-    motor_pitch_->Control(Motor::MotorCmd(
-        {.mode = Motor::ControlMode::MODE_CURRENT, .velocity = 0.0f}));
+  void ControlPitch()
+  {
+    motor_pitch_->Control(
+        Motor::MotorCmd({.mode = Motor::ControlMode::MODE_CURRENT, .velocity = 0.0f}));
   }
 
   /**
@@ -494,16 +448,18 @@ class Dart : public LibXR::Application {
    * @param target_yaw_angle 目标 Yaw 角度
    * @param dt_ 时间间隔
    */
-  void Solve(float& yaw_output, float target_yaw_angle, float dt_) {
+  void Solve(float& yaw_output, float target_yaw_angle, float dt_)
+  {
     float yaw_error = target_yaw_angle - yaw_motor_angle_;
     float target_yaw_speed = pid_yaw_angle_.Calculate(yaw_error, 0.0f, dt_);
-    float fb_yaw = pid_yaw_speed_.Calculate(target_yaw_speed,
-                                            motor_yaw_feedback_.velocity, dt_);
+    float fb_yaw =
+        pid_yaw_speed_.Calculate(target_yaw_speed, motor_yaw_feedback_.velocity, dt_);
     yaw_output = fb_yaw;
   }
 
   // === Launcher Functions ===
-  void UpdateFric() {
+  void UpdateFric()
+  {
     auto now = LibXR::Timebase::GetMilliseconds();
     dt_launcher_ = (now - last_online_time_launcher_).ToSecondf();
     last_online_time_launcher_ = now;
@@ -519,28 +475,32 @@ class Dart : public LibXR::Application {
     param_motor_fric_back_right_ = motor_fric_back_right_->GetFeedback();
   }
 
-  void UpdatePushMotor() {
+  void UpdatePushMotor()
+  {
     const float LAST_PUSH_MOTOR_ANGLE =
         LibXR::CycleValue<float>(param_push_motor_.abs_angle);
     push_motor_->Update();
     param_push_motor_ = push_motor_->GetFeedback();
     const float DELTA_PUSH_MOTOR_ANGLE =
-        LibXR::CycleValue<float>(param_push_motor_.abs_angle) -
-        LAST_PUSH_MOTOR_ANGLE;
+        LibXR::CycleValue<float>(param_push_motor_.abs_angle) - LAST_PUSH_MOTOR_ANGLE;
     this->push_motor_angle_ += DELTA_PUSH_MOTOR_ANGLE / push_motor_gear_ratio_;
   }
 
-  void DetectLaunch() {
+  void DetectLaunch()
+  {
     // 检测是否发生发射
     bool should_mark_launch = false;
     auto current_time = LibXR::Timebase::GetMilliseconds();
 
     if (fric_ready_ && (push_state_ == PushState::AT_MAX_WAITING ||
-                        push_state_ == PushState::MOVING_TO_MAX)) {
+                        push_state_ == PushState::MOVING_TO_MAX))
+    {
       // 检测扭矩变大
-      if (std::abs(motor_fric_back_left_->GetFeedback().torque) > 0.1f) {
+      if (std::abs(motor_fric_back_left_->GetFeedback().torque) > 0.1f)
+      {
         // 如果还没有开始100ms计时，则开始
-        if (!launch_detected_) {
+        if (!launch_detected_)
+        {
           launch_detected_ = true;
           launch_detect_timestamp_ = current_time;
         }
@@ -548,11 +508,15 @@ class Dart : public LibXR::Application {
     }
 
     // 处理100ms信号输出
-    if (launch_detected_) {
+    if (launch_detected_)
+    {
       // 如果在100ms内，输出true
-      if (current_time - launch_detect_timestamp_ < 100) {
+      if (current_time - launch_detect_timestamp_ < 100)
+      {
         should_mark_launch = true;
-      } else {
+      }
+      else
+      {
         // 100ms已过，重置状态，允许下次检测
         launch_detected_ = false;
         should_mark_launch = false;
@@ -562,31 +526,40 @@ class Dart : public LibXR::Application {
     marked_launch_ = should_mark_launch;
     launcher_topic_.Publish(marked_launch_);
   }
-  void ControlFric() {
+  void ControlFric()
+  {
     // 只在推杆电机复位完成时停止摩擦轮（在ControlPushMotor中处理）
-    if (launch_mode_ == LaunchMode::SINGLE_SHOT) {
+    if (launch_mode_ == LaunchMode::SINGLE_SHOT)
+    {
       if (ref_data_.dc.opening_status ==
               static_cast<uint8_t>(OPENING_STATUS::IS_OPENING) ||
-          ref_data_.dc.opening_status ==
-              static_cast<uint8_t>(OPENING_STATUS::ON)) {
+          ref_data_.dc.opening_status == static_cast<uint8_t>(OPENING_STATUS::ON))
+      {
         fric_mode_ = DartLauncherMode::FRIC_START;
-      } else {
+      }
+      else
+      {
         fric_mode_ = DartLauncherMode::FRIC_STOP;
       }
-    } else if (launch_mode_ == LaunchMode::FULL_FIRE) {
+    }
+    else if (launch_mode_ == LaunchMode::FULL_FIRE)
+    {
       // FULL_FIRE模式下直接根据fire_cmd控制
-      if (cmd_data_.x > 0.5f) {
+      if (cmd_data_.x > 0.5f)
+      {
         fric_mode_ = DartLauncherMode::FRIC_START;
       }
     }
 
-    switch (fric_mode_) {
+    switch (fric_mode_)
+    {
       case DartLauncherMode::FRIC_STOP:
         fric_target_speed_[0] = 0;
         fric_target_speed_[1] = 0;
         fric_target_speed_[2] = 0;
         fric_target_speed_[3] = 0;
-        for (auto& i : fric_speed_pid_) {
+        for (auto& i : fric_speed_pid_)
+        {
           i.SetOutLimit(0.1f);
           fric_ready_ = false;
         }
@@ -596,8 +569,10 @@ class Dart : public LibXR::Application {
         fric_target_speed_[1] = fric2_setpoint_speed_;
         fric_target_speed_[2] = fric1_setpoint_speed_;
         fric_target_speed_[3] = fric1_setpoint_speed_;
-        if (param_motor_fric_back_right_.velocity > fric1_setpoint_speed_) {
-          for (auto& i : fric_speed_pid_) {
+        if (param_motor_fric_back_right_.velocity > fric1_setpoint_speed_)
+        {
+          for (auto& i : fric_speed_pid_)
+          {
             i.SetOutLimit(0.0f);
             fric_ready_ = true;
           }  // if (dart->mode_ == DartMode::COMMON || dart->mode_ ==
@@ -610,17 +585,13 @@ class Dart : public LibXR::Application {
     }
 
     fric_output_[0] = fric_speed_pid_[0].Calculate(
-        fric_target_speed_[0], param_motor_fric_front_left_.velocity,
-        dt_launcher_);
+        fric_target_speed_[0], param_motor_fric_front_left_.velocity, dt_launcher_);
     fric_output_[1] = fric_speed_pid_[1].Calculate(
-        fric_target_speed_[1], param_motor_fric_front_right_.velocity,
-        dt_launcher_);
+        fric_target_speed_[1], param_motor_fric_front_right_.velocity, dt_launcher_);
     fric_output_[2] = fric_speed_pid_[2].Calculate(
-        fric_target_speed_[2], param_motor_fric_back_left_.velocity,
-        dt_launcher_);
+        fric_target_speed_[2], param_motor_fric_back_left_.velocity, dt_launcher_);
     fric_output_[3] = fric_speed_pid_[3].Calculate(
-        fric_target_speed_[3], param_motor_fric_back_right_.velocity,
-        dt_launcher_);
+        fric_target_speed_[3], param_motor_fric_back_right_.velocity, dt_launcher_);
 
     cmd_fric_front_left_.velocity = fric_output_[0];
     cmd_fric_front_right_.velocity = fric_output_[1];
@@ -633,13 +604,17 @@ class Dart : public LibXR::Application {
     motor_fric_back_right_->Control(cmd_fric_back_right_);
   }
 
-  void ControlPushMotor() {
-    if (!push_motor_init_) {
+  void ControlPushMotor()
+  {
+    if (!push_motor_init_)
+    {
       push_motor_setpoint_angle_ -= LibXR::TWO_PI / 250.0f;
       push_motor_angle_pid_.SetOutLimit(2000.0f);
       delay_time_launcher_++;
-      if (delay_time_launcher_ > 250) {
-        if (std::abs(param_push_motor_.torque) > 0.02) {
+      if (delay_time_launcher_ > 250)
+      {
+        if (std::abs(param_push_motor_.torque) > 0.02)
+        {
           push_motor_init_ = true;
           min_push_motor_angle_ = push_motor_angle_ + 2.0f;
           max_push_motor_angle_ = push_motor_angle_ + 61.0f;
@@ -648,47 +623,61 @@ class Dart : public LibXR::Application {
           fric_mode_ = DartLauncherMode::FRIC_STOP;
         }
       }
-    } else {
+    }
+    else
+    {
       // 推杆已初始化，处理发射逻辑
 
       // 如果模式是FRIC_START，启动摩擦轮并等待准备就绪
-      if (fric_mode_ == DartLauncherMode::FRIC_START) {
+      if (fric_mode_ == DartLauncherMode::FRIC_START)
+      {
         // 检查摩擦轮是否准备好
         if (!fric_ready_ &&
             param_motor_fric_back_right_.velocity > fric1_setpoint_speed_ &&
-            param_motor_fric_back_left_.velocity > fric1_setpoint_speed_) {
+            param_motor_fric_back_left_.velocity > fric1_setpoint_speed_)
+        {
           fric_ready_ = true;
-          for (auto& i : fric_speed_pid_) {
+          for (auto& i : fric_speed_pid_)
+          {
             i.SetOutLimit(0.0f);
           }
         }
 
         // 如果摩擦轮已准备好且有发射命令，处理状态机
-        if (fric_ready_) {
-          switch (launch_mode_) {
-            case LaunchMode::SINGLE_SHOT: {
+        if (fric_ready_)
+        {
+          switch (launch_mode_)
+          {
+            case LaunchMode::SINGLE_SHOT:
+            {
               // 单发模式 - 只有在fire_cmd从0变为1时才触发发射
               static bool last_fire_cmd = false;
 
               // 检测fire_cmd上升沿
-              if (!last_fire_cmd && fire_cmd_) {
+              if (!last_fire_cmd && fire_cmd_)
+              {
                 if (ref_data_.dc.opening_status ==
-                    static_cast<uint8_t>(OPENING_STATUS::ON)) {
+                    static_cast<uint8_t>(OPENING_STATUS::ON))
+                {
                   // 触发发射，只在IDLE状态下才开始新的发射循环
-                  if (push_state_ == PushState::IDLE) {
+                  if (push_state_ == PushState::IDLE)
+                  {
                     push_state_ = PushState::MOVING_TO_MAX;
                   }
                 }
               }
               last_fire_cmd = fire_cmd_;
 
-              switch (push_state_) {
+              switch (push_state_)
+              {
                 case PushState::MOVING_TO_MAX:
                   push_motor_setpoint_angle_ = max_push_motor_angle_;
-                  if (push_motor_angle_ > max_push_motor_angle_ - 2.0f) {
+                  if (push_motor_angle_ > max_push_motor_angle_ - 2.0f)
+                  {
                     push_state_ = PushState::AT_MAX_WAITING;
                   }
-                  if (launch_detected_) {
+                  if (launch_detected_)
+                  {
                     push_state_ = PushState::STOP_MOVING;
                     // launch_detected_ = false;
                     //  在STOP_MOVING状态中，fire_cmd应被重置，等待新的上升沿
@@ -701,7 +690,8 @@ class Dart : public LibXR::Application {
                 case PushState::AT_MAX_WAITING:
                   push_motor_setpoint_angle_ = max_push_motor_angle_;
                   // 如果检测到发射，停止
-                  if (launch_detected_) {
+                  if (launch_detected_)
+                  {
                     push_state_ = PushState::STOP_MOVING;
                     // launch_detected_ = false;
                     //  在STOP_MOVING状态中，fire_cmd应被重置，等待新的上升沿
@@ -713,7 +703,8 @@ class Dart : public LibXR::Application {
 
                 case PushState::MOVING_TO_MIN:
                   push_motor_setpoint_angle_ = min_push_motor_angle_;
-                  if (push_motor_angle_ < min_push_motor_angle_ + 2.0f) {
+                  if (push_motor_angle_ < min_push_motor_angle_ + 2.0f)
+                  {
                     push_state_ = PushState::IDLE;
                     // 推杆复位完成，停止摩擦轮
                     fric_mode_ = DartLauncherMode::FRIC_STOP;
@@ -726,11 +717,11 @@ class Dart : public LibXR::Application {
                   push_motor_setpoint_angle_ = push_motor_angle_;
                   // 在STOP_MOVING状态中，等待fire_cmd的上升沿以重置状态机
                   static bool last_fire_cmd_in_stop = false;
-                  if (!last_fire_cmd_in_stop && fire_cmd_) {
+                  if (!last_fire_cmd_in_stop && fire_cmd_)
+                  {
                     // 检测到上升沿，直接进入 MOVING_TO_MAX 开始新发射
                     push_state_ = PushState::MOVING_TO_MAX;
-                    fire_cmd_ =
-                        false;  // 可选：消费命令，或留给 MOVING_TO_MAX 逻辑处理
+                    fire_cmd_ = false;  // 可选：消费命令，或留给 MOVING_TO_MAX 逻辑处理
                   }
                   last_fire_cmd_in_stop = fire_cmd_;
                   break;
@@ -741,16 +732,20 @@ class Dart : public LibXR::Application {
               }
               break;
             }
-            case LaunchMode::FULL_FIRE: {
+            case LaunchMode::FULL_FIRE:
+            {
               // 连发模式
-              if (push_state_ == PushState::IDLE) {
+              if (push_state_ == PushState::IDLE)
+              {
                 push_state_ = PushState::MOVING_TO_MAX;
               }
 
-              switch (push_state_) {
+              switch (push_state_)
+              {
                 case PushState::MOVING_TO_MAX:
                   push_motor_setpoint_angle_ = max_push_motor_angle_;
-                  if (push_motor_angle_ > max_push_motor_angle_ - 1.0f) {
+                  if (push_motor_angle_ > max_push_motor_angle_ - 1.0f)
+                  {
                     push_state_ = PushState::AT_MAX_WAITING;
                   }
                   break;
@@ -758,12 +753,14 @@ class Dart : public LibXR::Application {
                 case PushState::AT_MAX_WAITING:
                   push_motor_setpoint_angle_ = max_push_motor_angle_;
                   // 如果检测到发射，立即复位准备下一发
-                  if (launch_detected_) {
+                  if (launch_detected_)
+                  {
                     push_state_ = PushState::MOVING_TO_MIN;
                     launch_detected_ = false;
                   }
                   // 如果fire_cmd变为false，也复位
-                  if (!fire_cmd_) {
+                  if (!fire_cmd_)
+                  {
                     push_state_ = PushState::MOVING_TO_MIN;
                   }
                   break;
@@ -771,10 +768,12 @@ class Dart : public LibXR::Application {
                 case PushState::MOVING_TO_MIN:
                   fric_mode_ = DartLauncherMode::FRIC_STOP;
                   push_motor_setpoint_angle_ = min_push_motor_angle_;
-                  if (push_motor_angle_ < min_push_motor_angle_ + 2.0f) {
+                  if (push_motor_angle_ < min_push_motor_angle_ + 2.0f)
+                  {
                     push_state_ = PushState::IDLE;
                     // 推杆复位完成，如果不再发射则停止摩擦轮
-                    if (!fire_cmd_) {
+                    if (!fire_cmd_)
+                    {
                       fric_mode_ = DartLauncherMode::FRIC_STOP;
                       is_firing_ = false;  // 重置发射状态
                     }
@@ -789,15 +788,20 @@ class Dart : public LibXR::Application {
               break;
             }
           }
-        } else {
+        }
+        else
+        {
           // 摩擦轮未准备好或没有发射命令，保持在IDLE状态
           if (push_state_ != PushState::MOVING_TO_MIN &&
-              push_state_ != PushState::AT_MAX_WAITING) {
+              push_state_ != PushState::AT_MAX_WAITING)
+          {
             push_state_ = PushState::IDLE;
             push_motor_setpoint_angle_ = min_push_motor_angle_;
           }
         }
-      } else {
+      }
+      else
+      {
         // FRIC_STOP模式，停止所有动作
         push_motor_setpoint_angle_ = min_push_motor_angle_;
         push_state_ = PushState::IDLE;
@@ -810,8 +814,7 @@ class Dart : public LibXR::Application {
     push_motor_setpoint_speed_ = push_motor_angle_pid_.Calculate(
         push_motor_setpoint_angle_, push_motor_angle_, dt_launcher_);
     push_motor_output_ = push_motor_speed_pid_.Calculate(
-        push_motor_setpoint_speed_, push_motor_->GetFeedback().velocity,
-        dt_launcher_);
+        push_motor_setpoint_speed_, push_motor_->GetFeedback().velocity, dt_launcher_);
     cmd_push_motor_.velocity = push_motor_output_;
 
     push_motor_->Control(cmd_push_motor_);
@@ -819,7 +822,8 @@ class Dart : public LibXR::Application {
   LibXR::Event& GetEvent() { return dart_event_; }
 
   void SetMode(uint32_t mode) { dart_event_.Active(mode); }
-  void EventHandler(DartMode mode) {
+  void EventHandler(DartMode mode)
+  {
     // SetMode(static_cast<uint32_t>(static_cast<DartEvent>(event_id)));
     mode_ = static_cast<DartMode>(mode);
     // if (event == DartEvent::SET_MODE_FRIC_START) {
@@ -833,13 +837,14 @@ class Dart : public LibXR::Application {
     // }
 
     if (mode == DartMode::YAW_COMMON || mode == DartMode::YAW_SCAN ||
-        mode == DartMode::RELAX) {
+        mode == DartMode::RELAX)
+    {
       {
-        ref_data_.dc.opening_status =
-            static_cast<uint8_t>(OPENING_STATUS::DEFAULT);
+        ref_data_.dc.opening_status = static_cast<uint8_t>(OPENING_STATUS::DEFAULT);
       }
     }
-    if (mode_ == DartMode::GAME) {
+    if (mode_ == DartMode::GAME)
+    {
       // min_yaw_motor_angle_ = 0.0f;
       // max_yaw_motor_angle_ = 0.0f;
       delay_time_gimbal_ = 0;
@@ -847,17 +852,23 @@ class Dart : public LibXR::Application {
     }
   }
 
-  void DR16CONTROL() {
-    if ((mode_ == DartMode::YAW_COMMON) || (mode_ == DartMode::YAW_SCAN)) {
-      if (cmd_data_.z > 0.7f) {
+  void DR16CONTROL()
+  {
+    if ((mode_ == DartMode::YAW_COMMON) || (mode_ == DartMode::YAW_SCAN))
+    {
+      if (cmd_data_.z > 0.7f)
+      {
         ref_data_.dc.opening_status = static_cast<uint8_t>(OPENING_STATUS::ON);
         fire_cmd_ = true;
         dart_gimbal_cmd_.yaw = 0.0f;
-      } else {
+      }
+      else
+      {
         fire_cmd_ = false;
       }
     }
-    if (mode_ == DartMode::YAW_COMMON) {
+    if (mode_ == DartMode::YAW_COMMON)
+    {
       yaw_motor_state_ = YawMotorState::NORMAL_CONTROL;
       dart_gimbal_cmd_.yaw = cmd_data_.x;
     }
