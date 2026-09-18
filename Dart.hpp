@@ -96,63 +96,57 @@ class Dart
     NORMAL_CONTROL  // 正常控制状态：接收上位机指令进行控制
   };
 
-  Dart(LibXR::GPIO* external_USER_KEY, uint32_t task_stack_depth,
-       LibXR::PID<float>::Param pid_yaw_angle, LibXR::PID<float>::Param pid_yaw_speed,
-       Motor* motor_yaw, Motor* motor_pitch, RMMotor* motor_fric_front_left_,
-       RMMotor* motor_fric_front_right_, RMMotor* motor_fric_back_left_,
-       RMMotor* motor_fric_back_right_, RMMotor* push_motor, float push_motor_gear_ratio_,
-       float fric1_setpoint_speed, float fric2_setpoint_speed,
-       LibXR::PID<float>::Param fric_speed_pid_0,
-       LibXR::PID<float>::Param fric_speed_pid_1,
-       LibXR::PID<float>::Param fric_speed_pid_2,
-       LibXR::PID<float>::Param fric_speed_pid_3,
-       LibXR::PID<float>::Param push_motor_speed_pid_,
-       LibXR::PID<float>::Param push_motor_angle_pid, CMD* cmd)
-      : pid_yaw_angle_(pid_yaw_angle),
-        pid_yaw_speed_(pid_yaw_speed),
-        motor_yaw_(motor_yaw),
-        motor_pitch_(motor_pitch),
-        user_key_(external_USER_KEY),
-        motor_fric_front_left_(motor_fric_front_left_),
-        motor_fric_front_right_(motor_fric_front_right_),
-        motor_fric_back_left_(motor_fric_back_left_),
-        motor_fric_back_right_(motor_fric_back_right_),
-        push_motor_(push_motor),
-        push_motor_gear_ratio_(push_motor_gear_ratio_),
-        fric1_setpoint_speed_(fric1_setpoint_speed),
-        fric2_setpoint_speed_(fric2_setpoint_speed),
-        fric_speed_pid_{fric_speed_pid_0, fric_speed_pid_1, fric_speed_pid_2,
-                        fric_speed_pid_3},
-        push_motor_speed_pid_(push_motor_speed_pid_),
-        push_motor_angle_pid_(push_motor_angle_pid),
-        cmd_(cmd)
+  struct Param
+  {
+    uint32_t task_stack_depth;
+    LibXR::PID<float>::Param pid_yaw_angle;
+    LibXR::PID<float>::Param pid_yaw_speed;
+    float push_motor_gear_ratio;
+    float fric1_setpoint_speed;
+    float fric2_setpoint_speed;
+    LibXR::PID<float>::Param fric_speed_pid_0;
+    LibXR::PID<float>::Param fric_speed_pid_1;
+    LibXR::PID<float>::Param fric_speed_pid_2;
+    LibXR::PID<float>::Param fric_speed_pid_3;
+    LibXR::PID<float>::Param push_motor_speed_pid;
+    LibXR::PID<float>::Param push_motor_angle_pid;
+  };
+
+  Dart(
+      Motor& motor_yaw,
+      Motor& motor_pitch,
+      RMMotor& motor_fric_front_left,
+      RMMotor& motor_fric_front_right,
+      RMMotor& motor_fric_back_left,
+      RMMotor& motor_fric_back_right,
+      RMMotor& push_motor,
+      CMD& cmd,
+      const Param& param = {.task_stack_depth = 4096, .pid_yaw_angle = {1.0, 900.0, 0.0, 0.0, 0.0, 1000.0, false}, .pid_yaw_speed = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_gear_ratio = 36.0, .fric1_setpoint_speed = 4500.0, .fric2_setpoint_speed = 4400.0, .fric_speed_pid_0 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_1 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_2 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_3 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_speed_pid = {1.0, 0.0008, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_angle_pid = {1.0, 1000.0, 0.0, 0.0, 0.0, 2000.0, false}})
+      : pid_yaw_angle_(param.pid_yaw_angle),
+        pid_yaw_speed_(param.pid_yaw_speed),
+        motor_yaw_(&motor_yaw),
+        motor_pitch_(&motor_pitch),
+        motor_fric_front_left_(&motor_fric_front_left),
+        motor_fric_front_right_(&motor_fric_front_right),
+        motor_fric_back_left_(&motor_fric_back_left),
+        motor_fric_back_right_(&motor_fric_back_right),
+        push_motor_(&push_motor),
+        push_motor_gear_ratio_(param.push_motor_gear_ratio),
+        fric1_setpoint_speed_(param.fric1_setpoint_speed),
+        fric2_setpoint_speed_(param.fric2_setpoint_speed),
+        fric_speed_pid_{param.fric_speed_pid_0, param.fric_speed_pid_1, param.fric_speed_pid_2,
+                        param.fric_speed_pid_3},
+        push_motor_speed_pid_(param.push_motor_speed_pid),
+        push_motor_angle_pid_(param.push_motor_angle_pid),
+        cmd_(&cmd)
   {
     ref_data_.dc.opening_status = 3;
 
     last_online_time_ = LibXR::Timebase::GetMicroseconds();
-    thread_.Create(this, ThreadFunction, "dartThread", task_stack_depth,
+    thread_.Create(this, ThreadFunction, "dartThread", param.task_stack_depth,
                    LibXR::Thread::Priority::MEDIUM);
 
     // Launcher event callbacks
-    // auto user_key_callback = LibXR::GPIO::Callback::Create(
-    //     [](bool in_isr, Dart* self) {
-    //       UNUSED(in_isr);
-    //       if (self->push_motor_init_) {
-    //         // 切换发射状态：第一次按键开始发射，第二次按键停止发射
-    //         if (self->is_firing_) {
-    //           // 正在发射，停止发射
-    //           self->fire_cmd_ = false;
-    //           self->is_firing_ = false;
-    //         } else {
-    //           // 未发射，开始发射
-    //           self->fire_cmd_ = true;
-    //           self->is_firing_ = true;
-    //           self->fric_mode_ = DartLauncherMode::FRIC_START;
-    //         }
-    //       }
-    //     },
-    //     this);
-    // user_key_->RegisterCallback(user_key_callback);
     // auto lost_ctrl_callback = LibXR::Callback<uint32_t>::Create(
     //     [](bool in_isr, Dart* dart, uint32_t event_id) {
     //       UNUSED(in_isr);
@@ -911,7 +905,6 @@ class Dart
   CMD::ChassisCMD cmd_data_{};
   float dt_launcher_ = 0.0f;
   LibXR::MillisecondTimestamp last_online_time_launcher_ = 0;
-  LibXR::GPIO* user_key_;
 
   RMMotor* motor_fric_front_left_;
   RMMotor* motor_fric_front_right_;
