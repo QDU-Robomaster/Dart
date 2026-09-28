@@ -10,6 +10,10 @@ depends:
   ref: same-or-dev
 - id: QDU-Robomaster/Referee
   ref: same-or-dev
+- id: QDU-Robomaster/Motor
+  ref: same-or-dev
+- id: QDU-Robomaster/HostData
+  ref: same-or-dev
 === END MANIFEST === */
 // clang-format on
 
@@ -17,6 +21,8 @@ depends:
 #include <cstdint>
 
 #include "CMD.hpp"
+#include "HostData.hpp"
+#include "Motor.hpp"
 #include "RMMotor.hpp"
 #include "Referee.hpp"
 #include "cycle_value.hpp"
@@ -191,12 +197,12 @@ class Dart
 
   static void ThreadFunction(Dart* dart)
   {
-    LibXR::Topic::ASyncSubscriber<CMD::GimbalCMD> dart_gimbal_suber(
+    LibXR::Topic::ASyncSubscriber<DartGimbalCMD> dart_gimbal_suber(
         "host_dart_gimbal_cmd");
     LibXR::Topic::ASyncSubscriber<CMD::LauncherCMD> launch_notify_suber("launcher_cmd");
     LibXR::Topic::ASyncSubscriber<Referee::LauncherPack> launcher_ref("launcher_ref");
     LibXR::Topic::ASyncSubscriber<CMD::ChassisCMD> cmd_suber("chassis_cmd");
-    LibXR::Topic::ASyncSubscriber<bool> fire_notify_suber("fire_notify");
+    LibXR::Topic::ASyncSubscriber<HostData::LauncherCMD> fire_notify_suber("fire_notify");
     dart_gimbal_suber.StartWaiting();
     launch_notify_suber.StartWaiting();
     launcher_ref.StartWaiting();
@@ -268,7 +274,7 @@ class Dart
       // }
       if (fire_notify_suber.Available())
       {
-        dart->fire_cmd_ = fire_notify_suber.GetData();
+        dart->fire_cmd_ = fire_notify_suber.GetData().isfire;
         fire_notify_suber.StartWaiting();
       }
       // auto current_time = LibXR::Timebase::GetMilliseconds();
