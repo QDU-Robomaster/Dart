@@ -312,8 +312,6 @@ class Dart
     }
   }
 
-  void OnMonitor() {}
-
   // === Gimbal Functions ===
   void UpdateYaw()
   {
