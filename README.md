@@ -40,9 +40,10 @@ Topic：
 | Topic | 方向 | 类型 | 说明 |
 | --- | --- | --- | --- |
 | `host_dart_gimbal_cmd` | 创建并订阅 | `Dart::DartGimbalCMD`（`yaw`） | 上位机给出的 yaw 偏移 |
-| `fire_notify` | 订阅 | `HostData::LauncherCMD`（`isfire`） | 发射命令 |
-| `chassis_cmd` | 订阅 | `CMD::ChassisCMD` | 遥控输入 |
-| `launcher_ref` | 订阅（仅 `GAME`） | `Referee::LauncherPack` | 飞镖发射口状态 |
+| `param.fire_notify_topic_name`（默认 `fire_notify`） | 订阅 | `HostData::LauncherCMD`（`isfire`） | 发射命令 |
+| `param.chassis_cmd_topic_name`（默认 `chassis_cmd`） | 订阅 | `CMD::ChassisCMD` | 遥控输入 |
+| `param.launcher_cmd_topic_name`（默认 `launcher_cmd`） | 订阅 | `CMD::LauncherCMD` | 当前代码只订阅，不读取 |
+| `param.launcher_ref_topic_name`（默认 `launcher_ref`） | 订阅（仅 `GAME`） | `Referee::LauncherPack` | 飞镖发射口状态 |
 | `launch_flag` | 发布（仅 `GAME`） | `bool` | 发射检测标志 |
 
 ## 依赖
@@ -88,6 +89,10 @@ Dart(Motor& motor_yaw,
   `{1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}`。
 - `push_motor_speed_pid`：推杆速度环，默认 `{1.0, 0.0008, 0.0, 0.0, 0.0, 1.0, false}`。
 - `push_motor_angle_pid`：推杆角度环，默认 `{1.0, 1000.0, 0.0, 0.0, 0.0, 2000.0, false}`。
+- `launcher_cmd_topic_name`、`chassis_cmd_topic_name`：订阅的 CMD 发射 / 底盘命令 Topic，默认
+  `"launcher_cmd"`、`"chassis_cmd"`，须与 CMD 的同名参数一致。
+- `launcher_ref_topic_name`：订阅的裁判系统发射数据 Topic，默认 `"launcher_ref"`。
+- `fire_notify_topic_name`：订阅的上位机开火通知 Topic，默认 `"fire_notify"`。
 
 ## 使用
 
@@ -182,6 +187,10 @@ modules:
             - '0.0'
             - '2000.0'
             - 'false'
+          launcher_cmd_topic_name: '"launcher_cmd"'
+          launcher_ref_topic_name: '"launcher_ref"'
+          chassis_cmd_topic_name: '"chassis_cmd"'
+          fire_notify_topic_name: '"fire_notify"'
 ```
 
 所有依赖都是其他模块实例的 id，须在本实例之前列出：`motor_yaw`、`motor_pitch` 为
