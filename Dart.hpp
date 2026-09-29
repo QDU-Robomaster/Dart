@@ -116,6 +116,10 @@ class Dart
     LibXR::PID<float>::Param fric_speed_pid_3;
     LibXR::PID<float>::Param push_motor_speed_pid;
     LibXR::PID<float>::Param push_motor_angle_pid;
+    const char* launcher_cmd_topic_name;  ///< 订阅的发射控制命令 Topic 名称
+    const char* launcher_ref_topic_name;  ///< 订阅的裁判系统发射数据 Topic 名称
+    const char* chassis_cmd_topic_name;   ///< 订阅的底盘控制命令 Topic 名称
+    const char* fire_notify_topic_name;   ///< 订阅的上位机开火通知 Topic 名称
   };
 
   Dart(
@@ -127,7 +131,7 @@ class Dart
       RMMotor& motor_fric_back_right,
       RMMotor& push_motor,
       CMD& cmd,
-      const Param& param = {.task_stack_depth = 4096, .pid_yaw_angle = {1.0, 900.0, 0.0, 0.0, 0.0, 1000.0, false}, .pid_yaw_speed = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_gear_ratio = 36.0, .fric1_setpoint_speed = 4500.0, .fric2_setpoint_speed = 4400.0, .fric_speed_pid_0 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_1 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_2 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_3 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_speed_pid = {1.0, 0.0008, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_angle_pid = {1.0, 1000.0, 0.0, 0.0, 0.0, 2000.0, false}})
+      const Param& param = {.task_stack_depth = 4096, .pid_yaw_angle = {1.0, 900.0, 0.0, 0.0, 0.0, 1000.0, false}, .pid_yaw_speed = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_gear_ratio = 36.0, .fric1_setpoint_speed = 4500.0, .fric2_setpoint_speed = 4400.0, .fric_speed_pid_0 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_1 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_2 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .fric_speed_pid_3 = {1.0, 0.001, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_speed_pid = {1.0, 0.0008, 0.0, 0.0, 0.0, 1.0, false}, .push_motor_angle_pid = {1.0, 1000.0, 0.0, 0.0, 0.0, 2000.0, false}, .launcher_cmd_topic_name = "launcher_cmd", .launcher_ref_topic_name = "launcher_ref", .chassis_cmd_topic_name = "chassis_cmd", .fire_notify_topic_name = "fire_notify"})
       : pid_yaw_angle_(param.pid_yaw_angle),
         pid_yaw_speed_(param.pid_yaw_speed),
         motor_yaw_(&motor_yaw),
@@ -146,6 +150,10 @@ class Dart
         push_motor_angle_pid_(param.push_motor_angle_pid),
         cmd_(&cmd)
   {
+    launcher_cmd_topic_name_ = param.launcher_cmd_topic_name;
+    launcher_ref_topic_name_ = param.launcher_ref_topic_name;
+    chassis_cmd_topic_name_ = param.chassis_cmd_topic_name;
+    fire_notify_topic_name_ = param.fire_notify_topic_name;
     ref_data_.dc.opening_status = 3;
 
     last_online_time_ = LibXR::Timebase::GetMicroseconds();
@@ -199,10 +207,13 @@ class Dart
   {
     LibXR::Topic::ASyncSubscriber<DartGimbalCMD> dart_gimbal_suber(
         "host_dart_gimbal_cmd");
-    LibXR::Topic::ASyncSubscriber<CMD::LauncherCMD> launch_notify_suber("launcher_cmd");
-    LibXR::Topic::ASyncSubscriber<Referee::LauncherPack> launcher_ref("launcher_ref");
-    LibXR::Topic::ASyncSubscriber<CMD::ChassisCMD> cmd_suber("chassis_cmd");
-    LibXR::Topic::ASyncSubscriber<HostData::LauncherCMD> fire_notify_suber("fire_notify");
+    LibXR::Topic::ASyncSubscriber<CMD::LauncherCMD> launch_notify_suber(
+        dart->launcher_cmd_topic_name_);
+    LibXR::Topic::ASyncSubscriber<Referee::LauncherPack> launcher_ref(
+        dart->launcher_ref_topic_name_);
+    LibXR::Topic::ASyncSubscriber<CMD::ChassisCMD> cmd_suber(dart->chassis_cmd_topic_name_);
+    LibXR::Topic::ASyncSubscriber<HostData::LauncherCMD> fire_notify_suber(
+        dart->fire_notify_topic_name_);
     dart_gimbal_suber.StartWaiting();
     launch_notify_suber.StartWaiting();
     launcher_ref.StartWaiting();
@@ -982,6 +993,10 @@ class Dart
       .dc = {.opening_status = static_cast<uint8_t>(OPENING_STATUS::DEFAULT)}};
   uint32_t delay_time_launcher_ = 0;
   DartMode mode_ = DartMode::RELAX;
+  const char* launcher_cmd_topic_name_ = nullptr;
+  const char* launcher_ref_topic_name_ = nullptr;
+  const char* chassis_cmd_topic_name_ = nullptr;
+  const char* fire_notify_topic_name_ = nullptr;
   LibXR::Thread thread_;
   LibXR::Mutex mutex_;
   uint16_t cnt = 0;
