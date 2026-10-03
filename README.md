@@ -125,7 +125,7 @@ An instance written by `xrobot instance add QDU-Robomaster/Dart`, with the depen
 ```yaml
 modules:
   - module: QDU-Robomaster/Dart
-    id: dart
+    id: Dart_0
     args:
       - motor_yaw: motor_yaw
       - motor_pitch: motor_pitch
