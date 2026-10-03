@@ -2,7 +2,7 @@
 
 // clang-format off
 /* === MODULE MANIFEST V2 ===
-module_description: Integrated Dart system combining gimbal and launcher functionality
+module_description: 飞镖系统模块：由 yaw 云台、四个摩擦轮和推杆组成的飞镖架控制 / Dart system Module controlling a dart launcher built from a yaw gimbal, four friction wheels and a pusher
 depends:
 - id: QDU-Robomaster/CMD
   ref: same-or-dev
@@ -94,10 +94,10 @@ class Dart
     FRIC_STOP,
   };
 
-  // Yaw motor状态机状态
+  // yaw 电机状态机状态
   enum class YawMotorState : uint8_t
   {
-    INITIALIZING,   // 初始化状态：向正方向移动寻找极限位置
+    INITIALIZING,   // 初始化状态：向负方向移动寻找极限位置
     SCANNING,       // 扫描状态：在max和min之间来回扫描
     NORMAL_CONTROL  // 正常控制状态：接收上位机指令进行控制
   };
@@ -160,14 +160,6 @@ class Dart
     thread_.Create(this, ThreadFunction, "dartThread", param.task_stack_depth,
                    LibXR::Thread::Priority::MEDIUM);
 
-    // Launcher event callbacks
-    // auto lost_ctrl_callback = LibXR::Callback<uint32_t>::Create(
-    //     [](bool in_isr, Dart* dart, uint32_t event_id) {
-    //       UNUSED(in_isr);
-    //       UNUSED(event_id);
-    //       dart->SetMode(static_cast<uint32_t>(DartMode::GAME));
-    //     },
-    //     this);
     auto start_ctrl_callback = LibXR::Callback<uint32_t>::Create(
         [](bool in_isr, Dart* dart, uint32_t event_id)
         {
@@ -236,7 +228,6 @@ class Dart
           dart->yaw_motor_state_ = YawMotorState::NORMAL_CONTROL;
           dart->last_gimbal_data_time_ = LibXR::Timebase::GetMilliseconds();
         }
-        // dart->cnt++;
 
         dart_gimbal_suber.StartWaiting();
       }
@@ -260,16 +251,6 @@ class Dart
           dart->scan_direction_ = true;
         }
       }
-      // else {
-      //   dart->dart_gimbal_cmd_.yaw = 0.0f;
-      // }
-      // if (launch_notify_suber.Available()) {
-      //   dart->fire_cmd_ = launch_notify_suber.GetData().isfire;
-      //   dart->yaw_motor_state_ = YawMotorState::NORMAL_CONTROL;
-      //   launch_notify_suber.StartWaiting();
-      // } else {
-      //   dart->dart_gimbal_cmd_.yaw = 0.0f;
-      // }
       if (dart->mode_ == DartMode::GAME)
       {
         if (launcher_ref.Available())
@@ -278,32 +259,11 @@ class Dart
           launcher_ref.StartWaiting();
         }
       }
-      // if (dart->mode_ == DartMode::COMMON || dart->mode_ == DartMode::RELAX)
-      // {
-      //   dart->ref_data_.dc.opening_status =
-      //       static_cast<uint8_t>(Dart::OPENING_STATUS::DEFAULT);
-      // }
       if (fire_notify_suber.Available())
       {
         dart->fire_cmd_ = fire_notify_suber.GetData().isfire;
         fire_notify_suber.StartWaiting();
       }
-      // auto current_time = LibXR::Timebase::GetMilliseconds();
-      // if (dart->yaw_motor_state_ == YawMotorState::NORMAL_CONTROL &&
-      //     std::abs(dart->dart_gimbal_cmd_.yaw) > 1e-6f &&  // 数据非0
-      //     (current_time - dart->last_gimbal_data_time_).ToMillisecond() >
-      //     100) {
-      //   dart->yaw_motor_state_ = YawMotorState::INITIALIZING;
-      //   dart->delay_time_gimbal_ = 0;  // 重置初始化计时器
-      //   // dart->min_yaw_motor_angle_ = 0.0f;  // 重置极限位置
-      //   // dart->max_yaw_motor_angle_ = 0.0f;
-      //   dart->reinit++;
-      // }
-      // if (dart->mode_ == DartMode::GAME) {
-      //   if (dart->dart_gimbal_cmd_.yaw == 0.0f) {
-      //     dart->yaw_motor_state_ = YawMotorState::INITIALIZING;
-      //     dart-
-      // }
 
       dart->UpdateYaw();
       dart->UpdatePitch();
@@ -323,7 +283,7 @@ class Dart
     }
   }
 
-  // === Gimbal Functions ===
+  // === 云台 ===
   void UpdateYaw()
   {
     auto now = LibXR::Timebase::GetMicroseconds();
@@ -364,7 +324,7 @@ class Dart
     {
       case YawMotorState::INITIALIZING:
       {
-        // 向正方向移动寻找极限位置
+        // 向负方向移动寻找极限位置
         yaw_motor_setpoint_angle_ -= LibXR::TWO_PI / 250.0f;
         delay_time_gimbal_++;
 
@@ -466,7 +426,7 @@ class Dart
     yaw_output = fb_yaw;
   }
 
-  // === Launcher Functions ===
+  // === 发射机构 ===
   void UpdateFric()
   {
     auto now = LibXR::Timebase::GetMilliseconds();
@@ -584,11 +544,7 @@ class Dart
           {
             i.SetOutLimit(0.0f);
             fric_ready_ = true;
-          }  // if (dart->mode_ == DartMode::COMMON || dart->mode_ ==
-             // DartMode::RELAX) {
-          //   dart->ref_data_.dc.opening_status =
-          //       static_cast<uint8_t>(Dart::OPENING_STATUS::DEFAULT);
-          // }
+          }
         }
         break;
     }
@@ -688,8 +644,7 @@ class Dart
                   if (launch_detected_)
                   {
                     push_state_ = PushState::STOP_MOVING;
-                    // launch_detected_ = false;
-                    //  在STOP_MOVING状态中，fire_cmd应被重置，等待新的上升沿
+                    // 在 STOP_MOVING 状态中重置 fire_cmd，等待新的上升沿
                     fire_cmd_ = false;
                     last_fire_cmd = false;  // 重置静态变量以准备下一次检测
                     cnt++;
@@ -702,8 +657,7 @@ class Dart
                   if (launch_detected_)
                   {
                     push_state_ = PushState::STOP_MOVING;
-                    // launch_detected_ = false;
-                    //  在STOP_MOVING状态中，fire_cmd应被重置，等待新的上升沿
+                    // 在 STOP_MOVING 状态中重置 fire_cmd，等待新的上升沿
                     fire_cmd_ = false;
                     last_fire_cmd = false;  // 重置静态变量以准备下一次检测
                     cnt++;
@@ -833,18 +787,7 @@ class Dart
   void SetMode(uint32_t mode) { dart_event_.Active(mode); }
   void EventHandler(DartMode mode)
   {
-    // SetMode(static_cast<uint32_t>(static_cast<DartEvent>(event_id)));
     mode_ = static_cast<DartMode>(mode);
-    // if (event == DartEvent::SET_MODE_FRIC_START) {
-    //   if (launch_mode_ == LaunchMode::FULL_FIRE) {
-    //     fric_mode_ = DartLauncherMode::FRIC_START;
-    //     fire_cmd_ = true;  // 启动发射命令
-    //   }
-    // } else if (event == DartEvent::SET_MODE_FRIC_STOP) {
-    //   fric_mode_ = DartLauncherMode::FRIC_STOP;
-    //   fire_cmd_ = false;  // 停止发射命令
-    // }
-
     if (mode == DartMode::YAW_COMMON || mode == DartMode::YAW_SCAN ||
         mode == DartMode::RELAX)
     {
@@ -854,8 +797,6 @@ class Dart
     }
     if (mode_ == DartMode::GAME)
     {
-      // min_yaw_motor_angle_ = 0.0f;
-      // max_yaw_motor_angle_ = 0.0f;
       delay_time_gimbal_ = 0;
       yaw_motor_state_ = YawMotorState::INITIALIZING;
     }
@@ -884,7 +825,7 @@ class Dart
   }
 
  private:
-  // === Gimbal Members ===
+  // === 云台成员 ===
   DartGimbalEvent current_mode_ = DartGimbalEvent::SET_MODE_COMMON;
 
   float dt_gimbal_ = 0.0f;
@@ -901,7 +842,6 @@ class Dart
 
   float yaw_motor_angle_ = 0.0f;
   const float YAW_MOTOR_GEAR_RATIO = 19.2032f;
-  // CMD::LauncherCMD launcher_cmd_;
   DartGimbalCMD dart_gimbal_cmd_ = {0.0f};
 
   // 有限状态机相关成员变量
@@ -916,7 +856,7 @@ class Dart
   LibXR::Topic dart_gimbal_data_tp_ =
       LibXR::Topic::CreateTopic<DartGimbalCMD>("host_dart_gimbal_cmd");
 
-  // === Launcher Members ===
+  // === 发射机构成员 ===
   CMD::ChassisCMD cmd_data_{};
   float dt_launcher_ = 0.0f;
   LibXR::MillisecondTimestamp last_online_time_launcher_ = 0;
