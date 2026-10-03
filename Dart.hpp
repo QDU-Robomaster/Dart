@@ -39,89 +39,190 @@ depends:
 #include "timebase.hpp"
 #include "uart.hpp"
 
+/**
+ * @brief 飞镖系统模块：由 yaw 云台、四个摩擦轮和推杆组成的飞镖架控制。
+ *        Dart system Module controlling a dart launcher built from a yaw gimbal, four
+ *        friction wheels and a pusher.
+ */
 class Dart
 {
  public:
+  /**
+   * @brief 飞镖模式，数值同时是 `GetEvent()` 上注册的事件 ID。
+   *        Dart modes; the values are also the event IDs registered on `GetEvent()`.
+   */
   enum class DartMode : uint8_t
   {
-    RELAX = 0,
-    YAW_COMMON = 1,
-    YAW_SCAN = 2,
-    GAME = 3,
+    RELAX = 0,       ///< 放松：yaw 电机 `Relax()`，发射口状态复位
+                     ///< Relax: yaw motor `Relax()`ed, gate status reset
+    YAW_COMMON = 1,  ///< 遥控 yaw 偏移控制
+                     ///< Remote-controlled yaw offset
+    YAW_SCAN = 2,    ///< 遥控模式下的 yaw 扫描
+                     ///< Yaw scanning under remote control
+    GAME = 3,        ///< 比赛：发射口状态来自裁判系统，yaw 重新初始化
+                     ///< Game: gate status from the referee system, yaw re-initialized
   };
+
+  /**
+   * @brief 飞镖发射口状态，对应裁判系统发射口数据中的 `opening_status`。
+   *        Dart gate status, matching `opening_status` of the referee launcher data.
+   */
   enum class OPENING_STATUS : uint8_t
   {
-    ON = 0,
-    CLOSE = 1,
-    IS_OPENING = 2,
-    DEFAULT = 3,
+    ON = 0,          ///< 已打开 Opened
+    CLOSE = 1,       ///< 已关闭 Closed
+    IS_OPENING = 2,  ///< 正在打开 Opening
+    DEFAULT = 3,     ///< 默认状态 Default
   };
+
+  /**
+   * @brief 发射模式。
+   *        Launch mode.
+   */
   enum class LaunchMode : uint8_t
   {
-    SINGLE_SHOT = 0,  // 单发模式
-    FULL_FIRE = 1     // 连发模式
+    SINGLE_SHOT = 0,  ///< 单发模式 Single shot
+    FULL_FIRE = 1     ///< 连发模式 Full fire
   };
 
+  /**
+   * @brief 推杆状态。
+   *        Pusher states.
+   */
   enum class PushState : uint8_t
   {
-    IDLE,            // 空闲状态，在最小位置
-    MOVING_TO_MAX,   // 向最大位置移动
-    AT_MAX_WAITING,  // 在最大位置等待（仅单发模式）
-    MOVING_TO_MIN,   // 向最小位置复位
-    STOP_MOVING,
+    IDLE,            ///< 空闲，位于最小位置 Idle at the minimum position
+    MOVING_TO_MAX,   ///< 向最大位置移动 Moving to the maximum position
+    AT_MAX_WAITING,  ///< 在最大位置等待（仅单发模式）
+                     ///< Waiting at the maximum position (single shot only)
+    MOVING_TO_MIN,   ///< 向最小位置复位 Returning to the minimum position
+    STOP_MOVING,     ///< 停在当前位置，等待下一次发射命令
+                     ///< Stopped at the current position, waiting for the next fire
+                     ///< command
   };
 
+  /**
+   * @brief 上位机给出的 yaw 偏移，通过 Topic `host_dart_gimbal_cmd` 传递。
+   *        Yaw offset from the host, passed through the Topic `host_dart_gimbal_cmd`.
+   */
   struct DartGimbalCMD
   {
-    float yaw;
+    float yaw;  ///< yaw 偏移 Yaw offset
   };
 
+  /**
+   * @brief yaw 云台事件。
+   *        Yaw gimbal events.
+   */
   enum class DartGimbalEvent : uint8_t
   {
-    SET_MODE_RELAX = 0,
-    SET_MODE_COMMON = 1,
+    SET_MODE_RELAX = 0,   ///< 放松 Relax
+    SET_MODE_COMMON = 1,  ///< 常规控制 Normal control
   };
 
+  /**
+   * @brief 摩擦轮事件。
+   *        Friction wheel events.
+   */
   enum class DartEvent : uint8_t
   {
-    SET_MODE_FRIC_START,
-    SET_MODE_FRIC_STOP,
+    SET_MODE_FRIC_START,  ///< 启动摩擦轮 Start the friction wheels
+    SET_MODE_FRIC_STOP,   ///< 停止摩擦轮 Stop the friction wheels
   };
 
+  /**
+   * @brief 摩擦轮状态。
+   *        Friction wheel states.
+   */
   enum class DartLauncherMode : uint8_t
   {
-    FRIC_START,
-    FRIC_STOP,
+    FRIC_START,  ///< 摩擦轮起转 Friction wheels spinning up
+    FRIC_STOP,   ///< 摩擦轮停止 Friction wheels stopped
   };
 
-  // yaw 电机状态机状态
+  /**
+   * @brief yaw 电机状态机状态。
+   *        States of the yaw motor state machine.
+   */
   enum class YawMotorState : uint8_t
   {
-    INITIALIZING,   // 初始化状态：向负方向移动寻找极限位置
-    SCANNING,       // 扫描状态：在max和min之间来回扫描
-    NORMAL_CONTROL  // 正常控制状态：接收上位机指令进行控制
+    INITIALIZING,   ///< 初始化：向负方向移动寻找极限位置
+                    ///< Initializing: move in the negative direction to find the limit
+    SCANNING,       ///< 扫描：在最大角与最小角之间往返
+                    ///< Scanning: sweep between the maximum and minimum angle
+    NORMAL_CONTROL  ///< 正常控制：按上位机或遥控的 yaw 偏移控制
+                    ///< Normal control: follow the yaw offset from the host or remote
   };
 
+  /**
+   * @brief 飞镖系统配置参数。
+   *        Dart system configuration parameters.
+   */
   struct Param
   {
-    uint32_t task_stack_depth;
-    LibXR::PID<float>::Param pid_yaw_angle;
-    LibXR::PID<float>::Param pid_yaw_speed;
-    float push_motor_gear_ratio;
-    float fric1_setpoint_speed;
-    float fric2_setpoint_speed;
-    LibXR::PID<float>::Param fric_speed_pid_0;
-    LibXR::PID<float>::Param fric_speed_pid_1;
-    LibXR::PID<float>::Param fric_speed_pid_2;
-    LibXR::PID<float>::Param fric_speed_pid_3;
-    LibXR::PID<float>::Param push_motor_speed_pid;
-    LibXR::PID<float>::Param push_motor_angle_pid;
+    uint32_t task_stack_depth;  ///< 线程栈深
+                                ///< Thread stack depth
+    LibXR::PID<float>::Param pid_yaw_angle;  ///< yaw 角度环 PID
+                                             ///< Yaw angle-loop PID
+    LibXR::PID<float>::Param pid_yaw_speed;  ///< yaw 速度环 PID
+                                             ///< Yaw speed-loop PID
+    float push_motor_gear_ratio;  ///< 推杆电机减速比
+                                  ///< Pusher motor reduction ratio
+    float fric1_setpoint_speed;  ///< 后两路摩擦轮目标转速 (rpm)，也是就绪判定阈值
+                                 ///< Target speed of the back two friction wheels (rpm),
+                                 ///< also the ready threshold
+    float fric2_setpoint_speed;  ///< 前两路摩擦轮目标转速 (rpm)
+                                 ///< Target speed of the front two friction wheels (rpm)
+    LibXR::PID<float>::Param fric_speed_pid_0;  ///< 前左摩擦轮速度环 PID
+                                                ///< Front-left wheel speed-loop PID
+    LibXR::PID<float>::Param fric_speed_pid_1;  ///< 前右摩擦轮速度环 PID
+                                                ///< Front-right wheel speed-loop PID
+    LibXR::PID<float>::Param fric_speed_pid_2;  ///< 后左摩擦轮速度环 PID
+                                                ///< Back-left wheel speed-loop PID
+    LibXR::PID<float>::Param fric_speed_pid_3;  ///< 后右摩擦轮速度环 PID
+                                                ///< Back-right wheel speed-loop PID
+    LibXR::PID<float>::Param push_motor_speed_pid;  ///< 推杆速度环 PID
+                                                    ///< Pusher speed-loop PID
+    LibXR::PID<float>::Param push_motor_angle_pid;  ///< 推杆角度环 PID
+                                                    ///< Pusher angle-loop PID
     const char* launcher_cmd_topic_name;  ///< 订阅的发射控制命令 Topic 名称
+                                          ///< Name of the subscribed launcher command
+                                          ///< Topic
     const char* launcher_ref_topic_name;  ///< 订阅的裁判系统发射数据 Topic 名称
+                                          ///< Name of the subscribed referee launcher
+                                          ///< Topic
     const char* chassis_cmd_topic_name;   ///< 订阅的底盘控制命令 Topic 名称
+                                          ///< Name of the subscribed chassis command
+                                          ///< Topic
     const char* fire_notify_topic_name;   ///< 订阅的上位机开火通知 Topic 名称
+                                          ///< Name of the subscribed host fire
+                                          ///< notification Topic
   };
 
+  /**
+   * @brief 构造 Dart，创建控制线程并注册模式事件与 CMD 事件。
+   *        Construct Dart, create the control thread and register the mode events and
+   *        the CMD events.
+   *
+   * @param motor_yaw yaw 电机。
+   *                  Yaw motor.
+   * @param motor_pitch pitch 电机。
+   *                    Pitch motor.
+   * @param motor_fric_front_left 前左摩擦轮电机。
+   *                              Front-left friction wheel motor.
+   * @param motor_fric_front_right 前右摩擦轮电机。
+   *                               Front-right friction wheel motor.
+   * @param motor_fric_back_left 后左摩擦轮电机。
+   *                             Back-left friction wheel motor.
+   * @param motor_fric_back_right 后右摩擦轮电机。
+   *                              Back-right friction wheel motor.
+   * @param push_motor 推杆电机。
+   *                   Pusher motor.
+   * @param cmd CMD 实例。
+   *            CMD instance.
+   * @param param 配置参数。
+   *              Configuration parameters.
+   */
   Dart(
       Motor& motor_yaw,
       Motor& motor_pitch,
@@ -195,6 +296,14 @@ class Dart
     cmd_->GetEvent().Register(CMD::CMD_EVENT_START_CTRL, start_ctrl_callback);
   }
 
+  /**
+   * @brief 控制线程函数：订阅 Topic，每 2 ms 执行一轮更新与控制。
+   *        Control thread function that subscribes to the Topics and runs one update and
+   *        control iteration every 2 ms.
+   *
+   * @param dart Dart 实例指针。
+   *             Pointer to the Dart instance.
+   */
   static void ThreadFunction(Dart* dart)
   {
     LibXR::Topic::ASyncSubscriber<DartGimbalCMD> dart_gimbal_suber(
@@ -284,6 +393,11 @@ class Dart
   }
 
   // === 云台 ===
+  /**
+   * @brief 更新 yaw 电机反馈，并按增量与减速比累加 yaw 输出轴角度。
+   *        Update the yaw motor feedback and accumulate the yaw output shaft angle from
+   *        the increments and the reduction ratio.
+   */
   void UpdateYaw()
   {
     auto now = LibXR::Timebase::GetMicroseconds();
@@ -299,12 +413,21 @@ class Dart
     this->yaw_motor_angle_ += DELTA_YAW_MOTOR_ANGLE / YAW_MOTOR_GEAR_RATIO;
   }
 
+  /**
+   * @brief 更新 pitch 电机反馈。
+   *        Update the pitch motor feedback.
+   */
   void UpdatePitch()
   {
     motor_pitch_->Update();
     motor_pitch_feedback_ = motor_pitch_->GetFeedback();
   }
 
+  /**
+   * @brief 按 yaw 状态机计算 yaw 输出并以 `MODE_CURRENT` 下发；放松时调用 `Relax()`。
+   *        Compute the yaw output from the yaw state machine and send it in
+   *        `MODE_CURRENT`; call `Relax()` when relaxed.
+   */
   void ControlYaw()
   {
     if (current_mode_ == DartGimbalEvent::SET_MODE_RELAX)
@@ -404,6 +527,10 @@ class Dart
     motor_control(motor_yaw_, motor_yaw_feedback_, yaw_motor_cmd);
   }
 
+  /**
+   * @brief 向 pitch 电机以 `MODE_CURRENT` 下发 0。
+   *        Send 0 to the pitch motor in `MODE_CURRENT`.
+   */
   void ControlPitch()
   {
     motor_pitch_->Control(
@@ -411,11 +538,15 @@ class Dart
   }
 
   /**
-   * @brief 解算 PID 控制输出
+   * @brief 由目标 yaw 角计算角度环与速度环的串级输出。
+   *        Compute the cascaded angle-loop and speed-loop output for a target yaw angle.
    *
-   * @param yaw_output Yaw 轴输出引用
-   * @param target_yaw_angle 目标 Yaw 角度
-   * @param dt_ 时间间隔
+   * @param yaw_output 输出：yaw 电机的控制量。
+   *                   Output: control value of the yaw motor.
+   * @param target_yaw_angle 目标 yaw 角。
+   *                         Target yaw angle.
+   * @param dt_ 控制周期，单位 s。
+   *            Control period in s.
    */
   void Solve(float& yaw_output, float target_yaw_angle, float dt_)
   {
@@ -427,6 +558,10 @@ class Dart
   }
 
   // === 发射机构 ===
+  /**
+   * @brief 更新四个摩擦轮电机的反馈。
+   *        Update the feedback of the four friction wheel motors.
+   */
   void UpdateFric()
   {
     auto now = LibXR::Timebase::GetMilliseconds();
@@ -444,6 +579,11 @@ class Dart
     param_motor_fric_back_right_ = motor_fric_back_right_->GetFeedback();
   }
 
+  /**
+   * @brief 更新推杆电机反馈，并按增量与减速比累加推杆角度。
+   *        Update the pusher motor feedback and accumulate the pusher angle from the
+   *        increments and the reduction ratio.
+   */
   void UpdatePushMotor()
   {
     const float LAST_PUSH_MOTOR_ANGLE =
@@ -455,6 +595,11 @@ class Dart
     this->push_motor_angle_ += DELTA_PUSH_MOTOR_ANGLE / push_motor_gear_ratio_;
   }
 
+  /**
+   * @brief 检测发射并发布 `launch_flag`：发射后 100 ms 内为 true。
+   *        Detect a launch and publish `launch_flag`, which is true for 100 ms after a
+   *        launch.
+   */
   void DetectLaunch()
   {
     // 检测是否发生发射
@@ -495,6 +640,11 @@ class Dart
     marked_launch_ = should_mark_launch;
     launcher_topic_.Publish(marked_launch_);
   }
+  /**
+   * @brief 按发射口状态启停摩擦轮，计算转速环输出并下发。
+   *        Start or stop the friction wheels from the gate status, compute the speed-loop
+   *        outputs and send them.
+   */
   void ControlFric()
   {
     // 只在推杆电机复位完成时停止摩擦轮（在ControlPushMotor中处理）
@@ -569,6 +719,11 @@ class Dart
     motor_fric_back_right_->Control(cmd_fric_back_right_);
   }
 
+  /**
+   * @brief 推杆初始化与发射状态机，计算角度环与速度环输出并下发。
+   *        Pusher initialization and launch state machine; compute the angle-loop and
+   *        speed-loop outputs and send them.
+   */
   void ControlPushMotor()
   {
     if (!push_motor_init_)
@@ -782,9 +937,31 @@ class Dart
 
     push_motor_->Control(cmd_push_motor_);
   }
+  /**
+   * @brief 获取飞镖事件对象，`DartMode` 的四个值注册在其上。
+   *        Get the dart event object on which the four values of `DartMode` are
+   *        registered.
+   * @return 事件对象的引用。
+   *         Reference to the event object.
+   */
   LibXR::Event& GetEvent() { return dart_event_; }
 
+  /**
+   * @brief 切换模式，等价于激活对应的事件 ID。
+   *        Switch the mode, equivalent to activating the corresponding event ID.
+   *
+   * @param mode `DartMode` 的数值。
+   *             Value of `DartMode`.
+   */
   void SetMode(uint32_t mode) { dart_event_.Active(mode); }
+  /**
+   * @brief 处理模式切换：更新模式，复位发射口状态，`GAME` 时重新初始化 yaw。
+   *        Handle a mode switch: update the mode, reset the gate status and re-initialize
+   *        yaw in `GAME`.
+   *
+   * @param mode 新模式。
+   *             New mode.
+   */
   void EventHandler(DartMode mode)
   {
     mode_ = static_cast<DartMode>(mode);
@@ -802,6 +979,11 @@ class Dart
     }
   }
 
+  /**
+   * @brief 按遥控输入更新发射命令与 yaw 偏移（仅 `YAW_COMMON` 与 `YAW_SCAN`）。
+   *        Update the fire command and the yaw offset from the remote controller input
+   *        (`YAW_COMMON` and `YAW_SCAN` only).
+   */
   void DR16CONTROL()
   {
     if ((mode_ == DartMode::YAW_COMMON) || (mode_ == DartMode::YAW_SCAN))
