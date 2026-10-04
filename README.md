@@ -72,6 +72,7 @@ Dart(Motor& motor_yaw,
 - `fric_speed_pid_0` 至 `fric_speed_pid_3`：前左、前右、后左、后右摩擦轮的速度环，默认均为 `{.k = 1.0, .p = 0.001, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 1.0, .cycle = false}`。
 - `push_motor_speed_pid`：推杆速度环，默认 `{.k = 1.0, .p = 0.0008, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 1.0, .cycle = false}`。
 - `push_motor_angle_pid`：推杆角度环，默认 `{.k = 1.0, .p = 1000.0, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 2000.0, .cycle = false}`。
+- `launcher_cmd_topic_name`：订阅的发射控制命令 Topic 名称，默认 `"launcher_cmd"`，与 CMD 的同名参数一致。
 - `chassis_cmd_topic_name`：订阅的底盘命令 Topic 名称，默认 `"chassis_cmd"`，与 CMD 的同名参数一致。
 - `launcher_ref_topic_name`：订阅的裁判系统发射数据 Topic 名称，默认 `"launcher_ref"`。
 - `fire_notify_topic_name`：订阅的上位机开火通知 Topic 名称，默认 `"fire_notify"`，与 HostData 的 `host_fire_topic_name`（默认 `"host_fire_notify"`）取相同名称。
@@ -94,6 +95,7 @@ Configuration parameters (`Param`; the PIDs are `LibXR::PID<float>::Param` with 
 - `fric_speed_pid_0` to `fric_speed_pid_3`: speed loops of the front-left, front-right, back-left and back-right friction wheels, all default to `{.k = 1.0, .p = 0.001, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 1.0, .cycle = false}`.
 - `push_motor_speed_pid`: pusher speed loop, default `{.k = 1.0, .p = 0.0008, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 1.0, .cycle = false}`.
 - `push_motor_angle_pid`: pusher angle loop, default `{.k = 1.0, .p = 1000.0, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 2000.0, .cycle = false}`.
+- `launcher_cmd_topic_name`: name of the subscribed launcher command Topic, default `"launcher_cmd"`, matching the parameter of the same name of CMD.
 - `chassis_cmd_topic_name`: name of the subscribed chassis command Topic, default `"chassis_cmd"`, matching the parameter of the same name of CMD.
 - `launcher_ref_topic_name`: name of the subscribed referee launcher data Topic, default `"launcher_ref"`.
 - `fire_notify_topic_name`: name of the subscribed host fire notification Topic, default `"fire_notify"`; it takes the same name as `host_fire_topic_name` of HostData (default `"host_fire_notify"`).
@@ -104,6 +106,7 @@ Configuration parameters (`Param`; the PIDs are `LibXR::PID<float>::Param` with 
 | --- | --- | --- | --- |
 | `host_dart_gimbal_cmd` | 创建并订阅 | `Dart::DartGimbalCMD`（`yaw`） | 上位机给出的 yaw 偏移 |
 | `param.fire_notify_topic_name`（默认 `fire_notify`） | 订阅 | `HostData::LauncherCMD`（`isfire`） | 上位机的发射命令 |
+| `param.launcher_cmd_topic_name`（默认 `launcher_cmd`） | 订阅 | `CMD::LauncherCMD` | 发射控制命令 |
 | `param.chassis_cmd_topic_name`（默认 `chassis_cmd`） | 订阅 | `CMD::ChassisCMD` | 遥控输入 |
 | `param.launcher_ref_topic_name`（默认 `launcher_ref`） | 订阅（仅 `GAME`） | `Referee::LauncherPack` | 飞镖发射口状态 |
 | `launch_flag` | 发布（仅 `GAME`） | `bool` | 发射检测标志 |
@@ -112,6 +115,7 @@ Configuration parameters (`Param`; the PIDs are `LibXR::PID<float>::Param` with 
 | --- | --- | --- | --- |
 | `host_dart_gimbal_cmd` | Create and subscribe | `Dart::DartGimbalCMD` (`yaw`) | Yaw offset from the host |
 | `param.fire_notify_topic_name` (default `fire_notify`) | Subscribe | `HostData::LauncherCMD` (`isfire`) | Fire command from the host |
+| `param.launcher_cmd_topic_name` (default `launcher_cmd`) | Subscribe | `CMD::LauncherCMD` | Launcher command |
 | `param.chassis_cmd_topic_name` (default `chassis_cmd`) | Subscribe | `CMD::ChassisCMD` | Remote controller input |
 | `param.launcher_ref_topic_name` (default `launcher_ref`) | Subscribe (`GAME` only) | `Referee::LauncherPack` | Dart gate status |
 | `launch_flag` | Publish (`GAME` only) | `bool` | Launch detection flag |
