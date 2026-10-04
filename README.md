@@ -74,7 +74,7 @@ Dart(Motor& motor_yaw,
 - `push_motor_angle_pid`：推杆角度环，默认 `{.k = 1.0, .p = 1000.0, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 2000.0, .cycle = false}`。
 - `chassis_cmd_topic_name`：订阅的底盘命令 Topic 名称，默认 `"chassis_cmd"`，与 CMD 的同名参数一致。
 - `launcher_ref_topic_name`：订阅的裁判系统发射数据 Topic 名称，默认 `"launcher_ref"`。
-- `fire_notify_topic_name`：订阅的上位机开火通知 Topic 名称，默认 `"fire_notify"`。
+- `fire_notify_topic_name`：订阅的上位机开火通知 Topic 名称，默认 `"fire_notify"`，与 HostData 的 `host_fire_topic_name`（默认 `"host_fire_notify"`）取相同名称。
 
 Dependencies:
 
@@ -96,7 +96,7 @@ Configuration parameters (`Param`; the PIDs are `LibXR::PID<float>::Param` with 
 - `push_motor_angle_pid`: pusher angle loop, default `{.k = 1.0, .p = 1000.0, .i = 0.0, .d = 0.0, .i_limit = 0.0, .out_limit = 2000.0, .cycle = false}`.
 - `chassis_cmd_topic_name`: name of the subscribed chassis command Topic, default `"chassis_cmd"`, matching the parameter of the same name of CMD.
 - `launcher_ref_topic_name`: name of the subscribed referee launcher data Topic, default `"launcher_ref"`.
-- `fire_notify_topic_name`: name of the subscribed host fire notification Topic, default `"fire_notify"`.
+- `fire_notify_topic_name`: name of the subscribed host fire notification Topic, default `"fire_notify"`; it takes the same name as `host_fire_topic_name` of HostData (default `"host_fire_notify"`).
 
 ## 3. Topic
 
@@ -218,7 +218,7 @@ modules:
 - `QDU-Robomaster/RMMotor`：摩擦轮与推杆电机。
 - `QDU-Robomaster/CMD`：CMD 事件与 `ChassisCMD` 类型。
 - `QDU-Robomaster/Referee`：`LauncherPack` 类型。
-- `QDU-Robomaster/HostData`：`LauncherCMD` 类型，`fire_notify` 通常由 `HostData` 创建。
+- `QDU-Robomaster/HostData`：`LauncherCMD` 类型；`fire_notify_topic_name` 与 HostData 的 `host_fire_topic_name` 同名时，该 Topic 由 `HostData` 创建。
 - LibXR。
 
 硬件：yaw 与 pitch 两个电机、四个摩擦轮电机和一个推杆电机，均通过 `Motor` 或 `RMMotor` 实例接入；yaw 云台与推杆的限位通过堵转扭矩标定。
@@ -229,7 +229,7 @@ Dependencies:
 - `QDU-Robomaster/RMMotor`: friction wheel and pusher motors.
 - `QDU-Robomaster/CMD`: CMD events and the `ChassisCMD` type.
 - `QDU-Robomaster/Referee`: the `LauncherPack` type.
-- `QDU-Robomaster/HostData`: the `LauncherCMD` type; `fire_notify` is usually created by `HostData`.
+- `QDU-Robomaster/HostData`: the `LauncherCMD` type; when `fire_notify_topic_name` equals `host_fire_topic_name` of HostData, that Topic is created by `HostData`.
 - LibXR.
 
 Hardware: the yaw and pitch motors, four friction wheel motors and one pusher motor, all attached through `Motor` or `RMMotor` instances; the limits of the yaw gimbal and the pusher are calibrated from the stall torque.
